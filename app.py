@@ -83,7 +83,7 @@ def render_video():
     uid = uuid.uuid4().hex[:12]
     mp4_path = OUTPUT_DIR / f"tounsi_{uid}.mp4"
     audio_path = OUTPUT_DIR / f"tounsi_{uid}.mp3"
-    W, H = 720, 1280
+    W, H = 540, 960
     image = Image.new("RGB", (W, H), "#101827")
     draw = ImageDraw.Draw(image)
     font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
@@ -135,7 +135,7 @@ def render_video():
         clip = ImageClip(frame).set_duration(duration)
         if audio is not None:
             clip = clip.set_audio(audio)
-        clip.write_videofile(str(mp4_path), fps=24, codec="libx264", audio_codec="aac", logger=None, threads=2)
+        clip.write_videofile(str(mp4_path), fps=15, codec="libx264", audio_codec="aac", logger=None, threads=1, preset="ultrafast", ffmpeg_params=["-crf", "28"])
     except Exception as exc:
         for p in (mp4_path, audio_path):
             try: p.unlink(missing_ok=True)
@@ -162,8 +162,8 @@ def render_stock():
     uploads = [f for f in request.files.getlist("clips") if f and f.filename]
     if len(uploads) < 1:
         return jsonify({"error": "حمّل مقطع فيديو واحد على الأقل من Pexels."}), 400
-    if len(uploads) > 4:
-        return jsonify({"error": "اختار 4 مقاطع كحدّ أقصى في المرّة."}), 400
+    if len(uploads) > 2:
+        return jsonify({"error": "اختار مقطعين كحدّ أقصى في المرّة باش ما يطيحش الخادم المجاني."}), 400
     if len(script) < 10:
         return jsonify({"error": "حضّر النصّ قبل إنشاء الفيديو."}), 400
     allowed = {".mp4", ".mov", ".webm", ".m4v"}
@@ -180,8 +180,8 @@ def render_stock():
             for index, file in enumerate(uploads):
                 path = Path(temp_dir) / f"clip_{index}{Path(secure_filename(file.filename)).suffix.lower()}"
                 file.save(path)
-                if path.stat().st_size > 25 * 1024 * 1024:
-                    return jsonify({"error": "كل مقطع لازم يكون أقل من 25 ميغابايت."}), 413
+                if path.stat().st_size > 15 * 1024 * 1024:
+                    return jsonify({"error": "كل مقطع لازم يكون أقل من 15 ميغابايت."}), 413
                 input_paths.append(path)
             from stock_renderer import render_stock_video
             render_stock_video(input_paths, data_title, script, mp4_path, audio_path)
@@ -205,8 +205,8 @@ def render_images():
     uploads = [f for f in request.files.getlist("images") if f and f.filename]
     if not uploads:
         return jsonify({"error": "اختار صورة واحدة على الأقل."}), 400
-    if len(uploads) > 8:
-        return jsonify({"error": "اختار 8 صور كحدّ أقصى."}), 400
+    if len(uploads) > 4:
+        return jsonify({"error": "اختار 4 صور كحدّ أقصى باش يبقى التصدير مستقر."}), 400
     if len(script) < 10:
         return jsonify({"error": "حضّر النصّ قبل إنشاء الفيديو."}), 400
     allowed = {".png", ".jpg", ".jpeg", ".webp"}
