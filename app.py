@@ -93,7 +93,7 @@ def render_video():
         title_font = body_font = small_font = ImageFont.load_default()
     draw.rounded_rectangle((28, 28, W-28, H-28), radius=32, outline="#f4b942", width=3)
     draw.text((W//2, 92), "TOUNSI AI STUDIO", font=small_font, fill="#f4b942", anchor="mm")
-    draw.text((W//2, 170), title[:50], font=title_font, fill="white", anchor="mm", direction="rtl")
+    draw.text((W//2, 170), title[:50], font=title_font, fill="white", anchor="mm")
     lines, current = [], ""
     for word in script.split():
         candidate = (current + " " + word).strip()
@@ -105,22 +105,37 @@ def render_video():
     if current: lines.append(current)
     y = 280
     for line in lines[:19]:
-        draw.text((W//2, y), line, font=body_font, fill="#e5e7eb", anchor="mm", direction="rtl")
+        draw.text((W//2, y), line, font=body_font, fill="#e5e7eb", anchor="mm")
         y += 42
     draw.text((W//2, H-105), "تابعنا للمزيد", font=small_font, fill="#f4b942", anchor="mm", direction="rtl")
     frame = np.array(image)
+    audio = None
+    clip = None
     try:
-        gTTS(text=(title + ". " + script)[:900], lang="ar").save(str(audio_path))
-        audio = AudioFileClip(str(audio_path))
-        clip = ImageClip(frame).set_duration(audio.duration + 0.4).set_audio(audio)
+        # Audio is optional: if the free text-to-speech service is unreachable,
+        # still create a valid MP4 instead of failing the entire export.
+        try:
+            gTTS(text=(title + ". " + script)[:900], lang="ar").save(str(audio_path))
+            audio = AudioFileClip(str(audio_path))
+        except Exception:
+            audio = None
+        duration = (audio.duration + 0.4) if audio is not None else max(8, min(45, len(script.split()) / 2.2))
+        clip = ImageClip(frame).set_duration(duration)
+        if audio is not None:
+            clip = clip.set_audio(audio)
         clip.write_videofile(str(mp4_path), fps=24, codec="libx264", audio_codec="aac", logger=None, threads=2)
-        clip.close()
-        audio.close()
     except Exception as exc:
         for p in (mp4_path, audio_path):
             try: p.unlink(missing_ok=True)
             except Exception: pass
-        return jsonify({"error": "تعذّر توليد الفيديو أو الصوت. تأكّد من اتصال الخادم بالإنترنت ثم جرّب مجددًا. " + str(exc)[:180]}), 500
+        return jsonify({"error": "تعذّر تركيب ملف MP4 على الخادم: " + str(exc)[:220]}), 500
+    finally:
+        try:
+            if clip is not None: clip.close()
+        except Exception: pass
+        try:
+            if audio is not None: audio.close()
+        except Exception: pass
     try: audio_path.unlink(missing_ok=True)
     except Exception: pass
     return jsonify({"download_url": f"/download/{mp4_path.name}", "filename": mp4_path.name, "message": "الفيديو جاهز للتنزيل."})
