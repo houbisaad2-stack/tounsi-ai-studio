@@ -4,7 +4,7 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#101827">
 <title>Tounsi AI Studio</title>
-<link rel="stylesheet" href="/static/style.css?v=20261023-images">
+<link rel="stylesheet" href="/static/style.css?v=20261023-local-gallery">
 <style>
 .scene-gallery{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:12px 0}
 .scene-card{padding:0;border:2px solid transparent;border-radius:12px;overflow:hidden;background:#172033;color:#fff;text-align:right;cursor:pointer}
@@ -38,10 +38,10 @@
 <label for="sceneImages">🖼️ معرض صور جاهزة</label>
 <p class="stock-help">اختار صور من المعرض مباشرة، أو زِد صورك من الهاتف. الصور المختارة تتدمج في فيديو عمودي.</p>
 <div id="sceneGallery" class="scene-gallery" aria-label="معرض صور جاهزة">
-  <button type="button" class="scene-card" data-image="https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=900&q=85"><img src="https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=360&q=75" alt="مشهد قهوة ومطعم"><span>☕ قهوة ولمّة</span></button>
-  <button type="button" class="scene-card" data-image="https://images.unsplash.com/photo-1529156069898-49953e39b3ac?auto=format&fit=crop&w=900&q=85"><img src="https://images.unsplash.com/photo-1529156069898-49953e39b3ac?auto=format&fit=crop&w=360&q=75" alt="أصحاب مع بعضهم"><span>👥 صحاب</span></button>
-  <button type="button" class="scene-card" data-image="https://images.unsplash.com/photo-1564769625905-50e93615e769?auto=format&fit=crop&w=900&q=85"><img src="https://images.unsplash.com/photo-1564769625905-50e93615e769?auto=format&fit=crop&w=360&q=75" alt="مسجد"><span>🌙 ديني</span></button>
-  <button type="button" class="scene-card" data-image="https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=900&q=85"><img src="https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=360&q=75" alt="منظر طبيعي"><span>🌿 طبيعة</span></button>
+  <button type="button" class="scene-card" data-image="/static/gallery/cafe.svg"><img src="/static/gallery/cafe.svg" alt="مشهد قهوة تونسية"><span>☕ قهوة ولمّة</span></button>
+  <button type="button" class="scene-card" data-image="/static/gallery/friends.svg"><img src="/static/gallery/friends.svg" alt="أصحاب مع بعضهم"><span>👥 صحاب</span></button>
+  <button type="button" class="scene-card" data-image="/static/gallery/mosque.svg"><img src="/static/gallery/mosque.svg" alt="مسجد"><span>🌙 ديني</span></button>
+  <button type="button" class="scene-card" data-image="/static/gallery/nature.svg"><img src="/static/gallery/nature.svg" alt="منظر طبيعي"><span>🌿 طبيعة</span></button>
 </div>
 <p id="galleryHint" class="stock-help">ما ثماش صور مختارة من المعرض.</p>
 <label for="sceneImages">أو اختار صور من جهازك</label>
@@ -147,7 +147,7 @@
     const files = Array.from($("sceneImages").files || []);
     const galleryCount = selectedGallery.size;
     if (!files.length && !galleryCount) { status.textContent = "اختار صور من المعرض أو من جهازك أوّلًا."; return; }
-    if (files.length + galleryCount > 8) { status.textContent = "المجموع لازم ما يفوتش 8 صور."; return; }
+    if (files.length + galleryCount > 4) { status.textContent = "اختار 4 صور كحدّ أقصى في المرّة باش يبقى التصدير مستقر."; return; }
     if (!$("script").value.trim()) { status.textContent = "حضّر النصّ أوّلًا."; return; }
     const button = $("renderImages");
     button.disabled = true; renderButton.disabled = true;
@@ -160,11 +160,27 @@
       files.forEach(file => form.append("images", file, file.name));
       for (const [url, label] of selectedGallery.entries()) {
         const imageResponse = await fetch(url);
-        if (!imageResponse.ok) throw new Error("ما نجّمتش نهبط صورة من المعرض: " + label);
-        const blob = await imageResponse.blob();
-        const mime = (blob.type || "").toLowerCase();
-        const ext = mime.includes("png") ? "png" : mime.includes("webp") ? "webp" : "jpg";
-        form.append("images", blob, "gallery-" + (form.getAll("images").length + 1) + "." + ext);
+        if (!imageResponse.ok) throw new Error("ما نجّمتش نحمّل صورة المعرض: " + label);
+        const svgBlob = await imageResponse.blob();
+        const objectUrl = URL.createObjectURL(svgBlob);
+        try {
+          const image = new Image();
+          image.src = objectUrl;
+          await new Promise((resolve, reject) => {
+            image.onload = resolve;
+            image.onerror = () => reject(new Error("تعذّر فتح صورة المعرض: " + label));
+          });
+          const canvas = document.createElement("canvas");
+          canvas.width = 540; canvas.height = 960;
+          const context = canvas.getContext("2d");
+          if (!context) throw new Error("المتصفح ما يدعمش تحويل الصورة.");
+          context.drawImage(image, 0, 0, canvas.width, canvas.height);
+          const pngBlob = await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
+          if (!pngBlob) throw new Error("تعذّر تجهيز صورة المعرض: " + label);
+          form.append("images", pngBlob, "gallery-" + (form.getAll("images").length + 1) + ".png");
+        } finally {
+          URL.revokeObjectURL(objectUrl);
+        }
       }
       const response = await fetch("/api/render-images", {method:"POST", body:form});
       const raw = await response.text(); let result = {};
