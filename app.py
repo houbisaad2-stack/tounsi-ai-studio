@@ -8,7 +8,7 @@ OUTPUT_DIR = Path(tempfile.gettempdir()) / "tounsi-ai-studio"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 def clean_text(value, max_len=1600):
-    return re.sub(r"\\s+", " ", (value or "").strip())[:max_len]
+    return re.sub(r"\s+", " ", (value or "").strip())[:max_len]
 
 @app.get("/")
 def index():
@@ -127,7 +127,7 @@ def render_video():
 
 @app.get("/download/<name>")
 def download(name):
-    if not re.fullmatch(r"tounsi_[a-f0-9]{12}\\.mp4", name):
+    if not re.fullmatch(r"tounsi_[a-f0-9]{12}\.mp4", name):
         return "Not found", 404
     path = OUTPUT_DIR / name
     if not path.is_file():
