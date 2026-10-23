@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#101827">
+<title>Tounsi AI Studio</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="top"><div class="brand"><span class="logo">✦</span><div><strong>Tounsi AI Studio</strong><small>من الفكرة للفيديو</small></div></div><span class="pill">نسخة تجريبية</span></header>
+<main>
+<section class="hero"><p class="eyebrow">صناعة محتوى تونسي أسهل</p><h1>فكرتك تولّي <span>فيديو</span></h1><p class="sub">حضّر النصّ، راجعه، وصدّر فيديو عمودي مع صوت عربي.</p>
+<div class="modes" role="group" aria-label="نوع المحتوى">
+<button class="mode active" data-mode="كوميديا تونسية">😂 كوميديا</button><button class="mode" data-mode="محتوى ديني">🌙 ديني</button><button class="mode" data-mode="محتوى تعليمي">📚 تعليمي</button>
+</div></section>
+<section class="panel">
+<label for="topic">موضوع الفيديو</label><input id="topic" maxlength="180" placeholder="مثال: التونسي كي يخلّص الفاتورة في القهوة">
+<div class="row"><button class="primary" id="generate">✨ حضّرلي نصّ</button><span class="hint">قوالب محلية — دون API مدفوع</span></div>
+<label for="title">عنوان الفيديو</label><input id="title" maxlength="120" placeholder="عنوان الفيديو">
+<label for="script">النصّ (تنجم تبدّلو قبل التصدير)</label><textarea id="script" rows="10" placeholder="النصّ متاع الفيديو يظهر هنا..."></textarea>
+<div class="actions"><button class="primary" id="render">🎬 أنشئ فيديو MP4</button><button class="secondary" id="clear">مسح</button></div>
+<div id="status" class="status" aria-live="polite"></div><a id="download" class="download" hidden>⬇️ نزّل الفيديو</a>
+</section>
+<section class="note"><strong>معلومة مهمّة</strong><p>الفيديو في النسخة هاذي بطاقة نصّية عمودية مع صوت عربي. توليد مشاهد سينمائية بالذكاء الاصطناعي والنشر الآلي على YouTube يحتاجان خدمات وصلاحيات إضافية.</p></section>
+</main><footer>صُنع للمبدعين التوانسة 🇹🇳</footer>
+<script>
+let mode = "كوميديا تونسية";
+document.querySelectorAll(".mode").forEach(b=>b.addEventListener("click",()=>{document.querySelectorAll(".mode").forEach(x=>x.classList.remove("active"));b.classList.add("active");mode=b.dataset.mode;}));
+const $=id=>document.getElementById(id);
+async function post(url,data){const r=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)});const j=await r.json();if(!r.ok)throw new Error(j.error||"صار خطأ غير متوقّع");return j;}
+$("generate").onclick=async()=>{ $("status").textContent="نحضّر في النصّ..."; $("download").hidden=true;try{const j=await post("/api/script",{topic:$("topic").value,mode});$("title").value=j.title;$("script").value=j.script;$("status").textContent=j.note;}catch(e){$("status").textContent=e.message;}};
+$("render").onclick=async()=>{ $("status").textContent="نولّد في الفيديو والصوت... استنّى شوية وما تسكّرش الصفحة."; $("render").disabled=true;$("download").hidden=true;try{const j=await post("/api/render",{title:$("title").value,script:$("script").value});$("download").href=j.download_url;$("download").hidden=false;$("status").textContent=j.message;}catch(e){$("status").textContent=e.message;}finally{$("render").disabled=false;}};
+$("clear").onclick=()=>{$("topic").value="";$("title").value="";$("script").value="";$("status").textContent="";$("download").hidden=true;};
+</script>
+</body></html>
