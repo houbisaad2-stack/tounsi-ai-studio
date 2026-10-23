@@ -8,11 +8,11 @@ def render_image_video(image_paths, title, script, output_path, audio_path):
     from gtts import gTTS
     import edge_tts
 
-    W, H = 720, 1280
+    W, H = 540, 960
     font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
     try:
-        title_font = ImageFont.truetype(font_path, 34)
-        cap_font = ImageFont.truetype(font_path, 30)
+        title_font = ImageFont.truetype(font_path, 28)
+        cap_font = ImageFont.truetype(font_path, 23)
     except Exception:
         title_font = cap_font = ImageFont.load_default()
 
@@ -33,8 +33,10 @@ def render_image_video(image_paths, title, script, output_path, audio_path):
             except Exception:
                 audio = None
 
-        for path in image_paths[:8]:
-            im = Image.open(path).convert("RGB")
+        for path in image_paths[:4]:
+            with Image.open(path) as source:
+                source.thumbnail((1080, 1920))
+                im = source.convert("RGB")
             # Fill a 9:16 canvas without stretching the image.
             scale = max(W / im.width, H / im.height)
             im = im.resize((int(im.width * scale), int(im.height * scale)))
@@ -55,9 +57,9 @@ def render_image_video(image_paths, title, script, output_path, audio_path):
         chunks = [" ".join(words[i:i+7]) for i in range(0, len(words), 7)] or [title]
         layers = [slideshow]
         for i, chunk in enumerate(chunks):
-            canvas = Image.new("RGBA", (W, 190), (0,0,0,0))
+            canvas = Image.new("RGBA", (W, 150), (0,0,0,0))
             d = ImageDraw.Draw(canvas)
-            d.rounded_rectangle((20, 18, W-20, 170), radius=20, fill=(0,0,0,185), outline=(244,185,66,230), width=2)
+            d.rounded_rectangle((16, 14, W-16, 136), radius=20, fill=(0,0,0,185), outline=(244,185,66,230), width=2)
             words2, lines, line = chunk.split(), [], ""
             for word in words2:
                 test = (line+" "+word).strip()
@@ -66,14 +68,14 @@ def render_image_video(image_paths, title, script, output_path, audio_path):
                 else: line=test
             if line: lines.append(line)
             for j, line in enumerate(lines[:2]):
-                d.text((W//2, 65+j*45), line, font=cap_font, fill="white", anchor="mm", direction="rtl")
+                d.text((W//2, 52+j*36), line, font=cap_font, fill="white", anchor="mm", direction="rtl")
             start = i * duration / len(chunks)
-            layer = ImageClip(np.array(canvas), transparent=True).set_start(start).set_duration(min(duration-start, duration/len(chunks)+0.03)).set_position(("center", 960))
+            layer = ImageClip(np.array(canvas), transparent=True).set_start(start).set_duration(min(duration-start, duration/len(chunks)+0.03)).set_position(("center", 720))
             layers.append(layer)
         final = CompositeVideoClip(layers, size=(W,H)).set_duration(duration)
         if audio is not None:
             final = final.set_audio(audio.set_duration(min(audio.duration,duration)))
-        final.write_videofile(str(output_path), fps=24, codec="libx264", audio_codec="aac", preset="ultrafast", logger=None, threads=2)
+        final.write_videofile(str(output_path), fps=15, codec="libx264", audio_codec="aac", preset="ultrafast", logger=None, threads=1, ffmpeg_params=["-crf", "28"])
     finally:
         if final:
             try: final.close()
