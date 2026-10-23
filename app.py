@@ -196,6 +196,48 @@ def render_stock():
             except Exception: pass
         return jsonify({"error": "تعذّر تركيب مشاهد الفيديو: " + str(exc)[:220]}), 500
 
+@app.post("/api/render-images")
+def render_images():
+    from werkzeug.utils import secure_filename
+    import tempfile
+    title = clean_text(request.form.get("title"), 120) or "Tounsi AI Studio"
+    script = clean_text(request.form.get("script"), 1500)
+    uploads = [f for f in request.files.getlist("images") if f and f.filename]
+    if not uploads:
+        return jsonify({"error": "اختار صورة واحدة على الأقل."}), 400
+    if len(uploads) > 8:
+        return jsonify({"error": "اختار 8 صور كحدّ أقصى."}), 400
+    if len(script) < 10:
+        return jsonify({"error": "حضّر النصّ قبل إنشاء الفيديو."}), 400
+    allowed = {".png", ".jpg", ".jpeg", ".webp"}
+    for f in uploads:
+        if Path(secure_filename(f.filename)).suffix.lower() not in allowed:
+            return jsonify({"error": "الصور المقبولة PNG أو JPG أو WEBP."}), 400
+    uid = uuid.uuid4().hex[:12]
+    mp4_path = OUTPUT_DIR / f"tounsi_{uid}.mp4"
+    audio_path = OUTPUT_DIR / f"voice_{uid}.mp3"
+    try:
+        with tempfile.TemporaryDirectory(prefix="tounsi-images-") as temp_dir:
+            paths = []
+            for i, f in enumerate(uploads):
+                path = Path(temp_dir) / f"scene_{i}{Path(secure_filename(f.filename)).suffix.lower()}"
+                f.save(path)
+                if path.stat().st_size > 10 * 1024 * 1024:
+                    return jsonify({"error": "كل صورة لازم تكون أقل من 10 ميغابايت."}), 413
+                paths.append(path)
+            from image_renderer import render_image_video
+            render_image_video(paths, title, script, mp4_path, audio_path)
+        try: audio_path.unlink(missing_ok=True)
+        except Exception: pass
+        if not mp4_path.is_file() or mp4_path.stat().st_size < 10000:
+            raise RuntimeError("ملف الفيديو ما تخلقش بالشكل الصحيح.")
+        return jsonify({"download_url": f"/download/{mp4_path.name}", "preview_url": f"/preview/{mp4_path.name}", "filename": mp4_path.name, "message": "فيديو الصور جاهز للمعاينة والتنزيل."})
+    except Exception as exc:
+        for path in (mp4_path, audio_path):
+            try: path.unlink(missing_ok=True)
+            except Exception: pass
+        return jsonify({"error": "تعذّر تركيب فيديو الصور: " + str(exc)[:220]}), 500
+
 @app.get("/preview/<name>")
 def preview(name):
     if not re.fullmatch(r"tounsi_[a-f0-9]{12}\.mp4", name):
