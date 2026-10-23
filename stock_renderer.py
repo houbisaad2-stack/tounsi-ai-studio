@@ -12,11 +12,11 @@ def render_stock_video(video_paths, title, script, output_path, audio_path):
     import edge_tts
     from gtts import gTTS
 
-    W, H = 720, 1280
+    W, H = 540, 960
     font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
     try:
-        title_font = ImageFont.truetype(font_path, 34)
-        caption_font = ImageFont.truetype(font_path, 32)
+        title_font = ImageFont.truetype(font_path, 28)
+        caption_font = ImageFont.truetype(font_path, 24)
     except Exception:
         title_font = caption_font = ImageFont.load_default()
 
@@ -25,15 +25,15 @@ def render_stock_video(video_paths, title, script, output_path, audio_path):
     audio = None
     final = None
     try:
-        for path in video_paths[:4]:
+        for path in video_paths[:2]:
             clip = VideoFileClip(str(path), audio=False)
             raw_clips.append(clip)
-            # Limit each uploaded source clip to 8 seconds to keep renders manageable.
-            clip = clip.subclip(0, min(clip.duration, 8))
-            clip = clip.resize(height=1280)
-            if clip.w < 720:
-                clip = clip.resize(width=720)
-            clip = clip.crop(x_center=clip.w / 2, y_center=clip.h / 2, width=720, height=1280)
+            # Keep decoding and compositing light for free-tier memory limits.
+            clip = clip.subclip(0, min(clip.duration, 5))
+            clip = clip.resize(height=960)
+            if clip.w < 540:
+                clip = clip.resize(width=540)
+            clip = clip.crop(x_center=clip.w / 2, y_center=clip.h / 2, width=540, height=960)
             prepared.append(clip)
 
         if not prepared:
@@ -58,7 +58,7 @@ def render_stock_video(video_paths, title, script, output_path, audio_path):
             except Exception:
                 audio = None
 
-        duration = min(45, max(8, audio.duration if audio is not None else min(joined.duration, 30)))
+        duration = min(30, max(8, audio.duration if audio is not None else min(joined.duration, 20)))
         if joined.duration < duration:
             base = joined.fx(vfx.loop, duration=duration)
         else:
@@ -66,11 +66,11 @@ def render_stock_video(video_paths, title, script, output_path, audio_path):
         layers = [base]
 
         # Title banner.
-        banner = Image.new("RGBA", (W, 115), (9, 16, 30, 170))
+        banner = Image.new("RGBA", (W, 90), (9, 16, 30, 170))
         d = ImageDraw.Draw(banner)
-        d.text((W // 2, 57), title[:45], font=title_font, fill=(255, 255, 255, 255),
+        d.text((W // 2, 45), title[:45], font=title_font, fill=(255, 255, 255, 255),
                anchor="mm", direction="rtl", stroke_width=1, stroke_fill=(0, 0, 0, 220))
-        title_layer = ImageClip(np.array(banner), transparent=True).set_duration(duration).set_position(("center", 35))
+        title_layer = ImageClip(np.array(banner), transparent=True).set_duration(duration).set_position(("center", 25))
         layers.append(title_layer)
 
         # Burn in short caption chunks, timed across the narration/video.
@@ -78,7 +78,7 @@ def render_stock_video(video_paths, title, script, output_path, audio_path):
         chunks = [" ".join(words[i:i+7]) for i in range(0, len(words), 7)] or [title]
         caption_duration = duration / len(chunks)
         for i, chunk in enumerate(chunks):
-            canvas = Image.new("RGBA", (W, 190), (0, 0, 0, 0))
+            canvas = Image.new("RGBA", (W, 150), (0, 0, 0, 0))
             d = ImageDraw.Draw(canvas)
             # Keep each caption to two lines for a phone screen.
             tokens = chunk.split()
@@ -93,22 +93,22 @@ def render_stock_video(video_paths, title, script, output_path, audio_path):
             if line:
                 lines.append(line)
             lines = lines[:2]
-            d.rounded_rectangle((22, 20, W-22, 170), radius=22, fill=(0, 0, 0, 175),
+            d.rounded_rectangle((18, 15, W-18, 135), radius=22, fill=(0, 0, 0, 175),
                                 outline=(244, 185, 66, 230), width=2)
             for j, text in enumerate(lines):
-                d.text((W // 2, 68 + j * 48), text, font=caption_font, fill="white",
+                d.text((W // 2, 52 + j * 38), text, font=caption_font, fill="white",
                        anchor="mm", direction="rtl", stroke_width=1, stroke_fill=(0, 0, 0, 180))
             layer = (ImageClip(np.array(canvas), transparent=True)
                      .set_start(i * caption_duration)
                      .set_duration(min(caption_duration + 0.04, duration - i * caption_duration))
-                     .set_position(("center", 965)))
+                     .set_position(("center", 720)))
             layers.append(layer)
 
         final = CompositeVideoClip(layers, size=(W, H)).set_duration(duration)
         if audio is not None:
             final = final.set_audio(audio.set_duration(duration) if audio.duration >= duration else audio.set_duration(audio.duration))
-        final.write_videofile(str(output_path), fps=24, codec="libx264", audio_codec="aac",
-                              preset="ultrafast", logger=None, threads=2)
+        final.write_videofile(str(output_path), fps=15, codec="libx264", audio_codec="aac",
+                              preset="ultrafast", logger=None, threads=1, ffmpeg_params=["-crf", "28"])
     finally:
         if final is not None:
             try: final.close()
