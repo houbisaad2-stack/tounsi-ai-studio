@@ -3,7 +3,7 @@ from pathlib import Path
 from flask import Flask, render_template, request, jsonify, send_file
 
 app = Flask(__name__)
-app.config["MAX_CONTENT_LENGTH"] = 100 * 1024 * 1024
+app.config["MAX_CONTENT_LENGTH"] = 110 * 1024 * 1024
 OUTPUT_DIR = Path(tempfile.gettempdir()) / "tounsi-ai-studio"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
