@@ -162,8 +162,9 @@
         const imageResponse = await fetch(url);
         if (!imageResponse.ok) throw new Error("ما نجّمتش نهبط صورة من المعرض: " + label);
         const blob = await imageResponse.blob();
-        const ext = blob.type.includes("png") ? "png" : "jpg";
-        form.append("images", blob, "gallery-" + selectedGallery.size + "-" + ext);
+        const mime = (blob.type || "").toLowerCase();
+        const ext = mime.includes("png") ? "png" : mime.includes("webp") ? "webp" : "jpg";
+        form.append("images", blob, "gallery-" + (form.getAll("images").length + 1) + "." + ext);
       }
       const response = await fetch("/api/render-images", {method:"POST", body:form});
       const raw = await response.text(); let result = {};
