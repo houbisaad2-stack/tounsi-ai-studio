@@ -4,7 +4,7 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#101827">
 <title>Tounsi AI Studio</title>
-<link rel="stylesheet" href="/static/style.css?v=20261023-stock">
+<link rel="stylesheet" href="/static/style.css?v=20261023-images">
 </head>
 <body>
 <header class="top"><div class="brand"><span class="logo">✦</span><div><strong>Tounsi AI Studio</strong><small>من الفكرة للفيديو</small></div></div><span class="pill">نسخة تجريبية</span></header>
@@ -25,6 +25,12 @@
 <input id="stockClips" type="file" accept="video/mp4,video/quicktime,video/webm,.m4v" multiple>
 <button type="button" class="primary stock-button" id="renderStock">🎬 أنشئ فيديو بمشاهد حقيقية</button>
 <p class="stock-help">الموقع يركّب المقاطع مع الصوت والترجمة في فيديو عمودي. ما يلزمكش مفتاح API.</p>
+</div>
+<div class="stock-box">
+<label for="sceneImages">🖼️ صور المشاهد المولّدة</label>
+<p class="stock-help">اختار حتى 8 صور من جهازك (PNG/JPG/WEBP، أقل من 10MB للصورة). الفيديو يركّبهم مع النصّ والصوت والترجمة.</p>
+<input id="sceneImages" type="file" accept="image/png,image/jpeg,image/webp" multiple>
+<button type="button" class="primary stock-button" id="renderImages">🎬 حوّل الصور لفيديو</button>
 </div>
 <div id="status" class="status" aria-live="polite">الموقع جاهز. اكتب موضوع، حضّر النصّ، وبعد اضغط على إنشاء فيديو MP4.</div>
 <a id="download" class="download" hidden>⬇️ نزّل الفيديو</a>
@@ -105,6 +111,31 @@
     } finally {
       button.disabled = false; renderButton.disabled = false; button.textContent = oldText;
     }
+  });
+  $("renderImages").addEventListener("click", async () => {
+    const files = $("sceneImages").files;
+    if (!files || !files.length) { status.textContent = "اختار صور المشاهد أوّلًا."; return; }
+    if (files.length > 8) { status.textContent = "اختار 8 صور كحدّ أقصى."; return; }
+    if (!$("script").value.trim()) { status.textContent = "حضّر النصّ أوّلًا."; return; }
+    const button = $("renderImages");
+    button.disabled = true; renderButton.disabled = true;
+    status.textContent = "نركّب الصور مع الصوت والترجمة... استنّى وخلي الصفحة محلولة.";
+    $("download").hidden = true; $("previewWrap").hidden = true;
+    try {
+      const form = new FormData();
+      form.append("title", $("title").value);
+      form.append("script", $("script").value);
+      Array.from(files).forEach(file => form.append("images", file, file.name));
+      const response = await fetch("/api/render-images", {method:"POST", body:form});
+      const raw = await response.text(); let result = {};
+      try { result = raw ? JSON.parse(raw) : {}; } catch (_) { throw new Error("ردّ الخادم موش مفهوم (HTTP " + response.status + ")."); }
+      if (!response.ok) throw new Error(result.error || ("فشل الطلب (HTTP " + response.status + ")."));
+      $("download").href = result.download_url; $("download").hidden = false;
+      if (result.preview_url) { $("videoPreview").src = result.preview_url; $("previewWrap").hidden = false; }
+      status.textContent = result.message || "الفيديو جاهز.";
+      $("previewWrap").scrollIntoView({behavior:"smooth", block:"start"});
+    } catch (e) { status.textContent = "تعذّر إنشاء فيديو الصور: " + e.message; }
+    finally { button.disabled = false; renderButton.disabled = false; }
   });
   $("clear").addEventListener("click", () => {
     $("topic").value = ""; $("title").value = ""; $("script").value = ""; status.textContent = "تمّ المسح. اكتب موضوع جديد.";
