@@ -76,6 +76,8 @@ def render_video():
         import numpy as np
         from moviepy.editor import ImageClip, AudioFileClip
         from gtts import gTTS
+        import asyncio
+        import edge_tts
     except Exception as exc:
         return jsonify({"error": "مكتبات الفيديو غير جاهزة على الخادم. راجع سجلّات Render. " + str(exc)[:160]}), 500
     uid = uuid.uuid4().hex[:12]
@@ -115,10 +117,20 @@ def render_video():
         # Audio is optional: if the free text-to-speech service is unreachable,
         # still create a valid MP4 instead of failing the entire export.
         try:
-            gTTS(text=(title + ". " + script)[:900], lang="ar").save(str(audio_path))
+            # Prefer Microsoft's Tunisian Arabic male voice when the free Edge TTS endpoint is reachable.
+            spoken_text = (title + ". " + script)[:900]
+            async def save_tunisian_voice():
+                communicate = edge_tts.Communicate(spoken_text, voice="ar-TN-HediNeural", rate="+0%", volume="+0%")
+                await communicate.save(str(audio_path))
+            asyncio.run(save_tunisian_voice())
             audio = AudioFileClip(str(audio_path))
         except Exception:
-            audio = None
+            # Compatibility fallback: generic Arabic TTS; it may not sound Tunisian.
+            try:
+                gTTS(text=(title + ". " + script)[:900], lang="ar").save(str(audio_path))
+                audio = AudioFileClip(str(audio_path))
+            except Exception:
+                audio = None
         duration = (audio.duration + 0.4) if audio is not None else max(8, min(45, len(script.split()) / 2.2))
         clip = ImageClip(frame).set_duration(duration)
         if audio is not None:
