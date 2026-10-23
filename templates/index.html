@@ -24,12 +24,55 @@
 <section class="note"><strong>معلومة مهمّة</strong><p>الفيديو في النسخة هاذي بطاقة نصّية عمودية مع صوت عربي. توليد مشاهد سينمائية بالذكاء الاصطناعي والنشر الآلي على YouTube يحتاجان خدمات وصلاحيات إضافية.</p></section>
 </main><footer>صُنع للمبدعين التوانسة 🇹🇳</footer>
 <script>
-let mode = "كوميديا تونسية";
-document.querySelectorAll(".mode").forEach(b=>b.addEventListener("click",()=>{document.querySelectorAll(".mode").forEach(x=>x.classList.remove("active"));b.classList.add("active");mode=b.dataset.mode;}));
-const $=id=>document.getElementById(id);
-async function post(url,data){const r=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)});const raw=await r.text();let j={};try{j=raw?JSON.parse(raw):{};}catch(e){throw new Error("الخادم رجّع ردّ غير مفهوم (HTTP "+r.status+"). استنّى شوية وراجع Render Logs إذا تواصل الخطأ.");}if(!r.ok)throw new Error(j.error||("طلب فشل (HTTP "+r.status+"). جرّب مرّة أخرى."));if(!raw)throw new Error("الخادم رجّع ردّ فارغ. استنّى شوية وجرّب من جديد.");return j;}
-$("generate").onclick=async()=>{ $("status").textContent="نحضّر في النصّ..."; $("download").hidden=true;try{const j=await post("/api/script",{topic:$("topic").value,mode});$("title").value=j.title;$("script").value=j.script;$("status").textContent=j.note;}catch(e){$("status").textContent=e.message;}};
-$("render").onclick=async()=>{ $("status").textContent="نولّد في الفيديو والصوت... استنّى شوية وما تسكّرش الصفحة."; $("render").disabled=true;$("download").hidden=true;try{const j=await post("/api/render",{title:$("title").value,script:$("script").value});$("download").href=j.download_url;$("download").hidden=false;$("status").textContent=j.message;}catch(e){$("status").textContent=e.message;}finally{$("render").disabled=false;}};
-$("clear").onclick=()=>{$("topic").value="";$("title").value="";$("script").value="";$("status").textContent="";$("download").hidden=true;};
+document.addEventListener("DOMContentLoaded", () => {
+  const $ = id => document.getElementById(id);
+  const status = $("status");
+  const renderButton = $("render");
+  let mode = "كوميديا تونسية";
+  document.querySelectorAll(".mode").forEach(b => b.addEventListener("click", () => {
+    document.querySelectorAll(".mode").forEach(x => x.classList.remove("active"));
+    b.classList.add("active");
+    mode = b.dataset.mode || "كوميديا تونسية";
+  }));
+  async function post(url, data) {
+    const response = await fetch(url, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(data)});
+    const raw = await response.text();
+    let result;
+    try { result = raw ? JSON.parse(raw) : {}; }
+    catch (_) { throw new Error("الخادم رجّع ردّ غير مفهوم (HTTP " + response.status + "). افتح Render Logs."); }
+    if (!response.ok) throw new Error(result.error || ("فشل الطلب (HTTP " + response.status + ")."));
+    if (!raw) throw new Error("الخادم رجّع ردّ فارغ. جرّب من جديد.");
+    return result;
+  }
+  $("generate").addEventListener("click", async () => {
+    status.textContent = "نحضّر في النصّ...";
+    $("download").hidden = true;
+    try {
+      const result = await post("/api/script", {topic:$("topic").value, mode});
+      $("title").value = result.title || "";
+      $("script").value = result.script || "";
+      status.textContent = result.note || "النصّ جاهز.";
+    } catch (error) { status.textContent = "صار خطأ: " + error.message; }
+  });
+  renderButton.addEventListener("click", async () => {
+    renderButton.disabled = true;
+    status.textContent = "وصلنا للزرّ. نولّد في الفيديو والصوت؛ استنّى وما تسكّرش الصفحة...";
+    $("download").hidden = true;
+    try {
+      const result = await post("/api/render", {title:$("title").value, script:$("script").value});
+      $("download").href = result.download_url;
+      $("download").hidden = false;
+      status.textContent = result.message || "الفيديو جاهز للتنزيل.";
+    } catch (error) { status.textContent = "تعذّر إنشاء الفيديو: " + error.message; }
+    finally { renderButton.disabled = false; }
+  });
+  $("clear").addEventListener("click", () => {
+    $("topic").value = ""; $("title").value = ""; $("script").value = "";
+    status.textContent = ""; $("download").hidden = true;
+  });
+  window.addEventListener("error", event => {
+    status.textContent = "خطأ في صفحة الموقع: " + (event.message || "خطأ JavaScript");
+  });
+});
 </script>
 </body></html>
