@@ -15,64 +15,56 @@
 </div></section>
 <section class="panel">
 <label for="topic">موضوع الفيديو</label><input id="topic" maxlength="180" placeholder="مثال: التونسي كي يخلّص الفاتورة في القهوة">
-<div class="row"><button class="primary" id="generate">✨ حضّرلي نصّ</button><span class="hint">قوالب محلية — دون API مدفوع</span></div>
+<div class="row"><button type="button" class="primary" id="generate">✨ حضّرلي نصّ</button><span class="hint">قوالب محلية — دون API مدفوع</span></div>
 <label for="title">عنوان الفيديو</label><input id="title" maxlength="120" placeholder="عنوان الفيديو">
 <label for="script">النصّ (تنجم تبدّلو قبل التصدير)</label><textarea id="script" rows="10" placeholder="النصّ متاع الفيديو يظهر هنا..."></textarea>
-<div class="actions"><button class="primary" id="render">🎬 أنشئ فيديو MP4</button><button class="secondary" id="clear">مسح</button></div>
-<div id="status" class="status" aria-live="polite"></div><a id="download" class="download" hidden>⬇️ نزّل الفيديو</a>
+<div class="actions"><button type="button" class="primary" id="render">🎬 أنشئ فيديو MP4</button><button type="button" class="secondary" id="clear">مسح</button></div>
+<div id="status" class="status" aria-live="polite">الموقع جاهز. اكتب موضوع، حضّر النصّ، وبعد اضغط على إنشاء فيديو MP4.</div>
+<a id="download" class="download" hidden>⬇️ نزّل الفيديو</a>
+<div id="previewWrap" class="preview-wrap" hidden><strong>معاينة الفيديو</strong><video id="videoPreview" controls playsinline preload="metadata"></video></div>
 </section>
 <section class="note"><strong>معلومة مهمّة</strong><p>الفيديو في النسخة هاذي بطاقة نصّية عمودية مع صوت عربي. توليد مشاهد سينمائية بالذكاء الاصطناعي والنشر الآلي على YouTube يحتاجان خدمات وصلاحيات إضافية.</p></section>
 </main><footer>صُنع للمبدعين التوانسة 🇹🇳</footer>
 <script>
-document.addEventListener("DOMContentLoaded", () => {
-  const $ = id => document.getElementById(id);
-  const status = $("status");
-  const renderButton = $("render");
+(() => {
+  const $ = id => document.getElementById(id), status = $("status"), renderButton = $("render");
   let mode = "كوميديا تونسية";
   document.querySelectorAll(".mode").forEach(b => b.addEventListener("click", () => {
     document.querySelectorAll(".mode").forEach(x => x.classList.remove("active"));
-    b.classList.add("active");
-    mode = b.dataset.mode || "كوميديا تونسية";
+    b.classList.add("active"); mode = b.dataset.mode || "كوميديا تونسية";
   }));
   async function post(url, data) {
     const response = await fetch(url, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(data)});
-    const raw = await response.text();
-    let result;
-    try { result = raw ? JSON.parse(raw) : {}; }
-    catch (_) { throw new Error("الخادم رجّع ردّ غير مفهوم (HTTP " + response.status + "). افتح Render Logs."); }
+    const raw = await response.text(); let result = {};
+    try { result = raw ? JSON.parse(raw) : {}; } catch (_) { throw new Error("ردّ الخادم موش مفهوم (HTTP " + response.status + ")."); }
     if (!response.ok) throw new Error(result.error || ("فشل الطلب (HTTP " + response.status + ")."));
-    if (!raw) throw new Error("الخادم رجّع ردّ فارغ. جرّب من جديد.");
     return result;
   }
   $("generate").addEventListener("click", async () => {
-    status.textContent = "نحضّر في النصّ...";
-    $("download").hidden = true;
+    status.textContent = "نحضّر في النصّ..."; $("download").hidden = true; $("previewWrap").hidden = true;
     try {
-      const result = await post("/api/script", {topic:$("topic").value, mode});
-      $("title").value = result.title || "";
-      $("script").value = result.script || "";
-      status.textContent = result.note || "النصّ جاهز.";
-    } catch (error) { status.textContent = "صار خطأ: " + error.message; }
+      const r = await post("/api/script", {topic:$("topic").value, mode});
+      $("title").value = r.title || ""; $("script").value = r.script || ""; status.textContent = r.note || "النصّ جاهز.";
+    } catch (e) { status.textContent = "صار خطأ: " + e.message; }
   });
   renderButton.addEventListener("click", async () => {
-    renderButton.disabled = true;
-    status.textContent = "وصلنا للزرّ. نولّد في الفيديو والصوت؛ استنّى وما تسكّرش الصفحة...";
-    $("download").hidden = true;
+    renderButton.disabled = true; status.textContent = "بدأ إنشاء الفيديو. استنّى شوية وخلي الصفحة محلولة...";
+    $("download").hidden = true; $("previewWrap").hidden = true;
     try {
-      const result = await post("/api/render", {title:$("title").value, script:$("script").value});
-      $("download").href = result.download_url;
-      $("download").hidden = false;
-      status.textContent = result.message || "الفيديو جاهز للتنزيل.";
-    } catch (error) { status.textContent = "تعذّر إنشاء الفيديو: " + error.message; }
+      const r = await post("/api/render", {title:$("title").value, script:$("script").value});
+      if (!r.download_url) throw new Error("الخادم ما رجّعش رابط الفيديو.");
+      $("download").href = r.download_url; $("download").hidden = false;
+      if (r.preview_url) { $("videoPreview").src = r.preview_url; $("previewWrap").hidden = false; }
+      status.textContent = r.message || "الفيديو جاهز.";
+      if (! $("previewWrap").hidden) $("previewWrap").scrollIntoView({behavior:"smooth", block:"start"});
+    } catch (e) { status.textContent = "تعذّر إنشاء الفيديو: " + e.message; }
     finally { renderButton.disabled = false; }
   });
   $("clear").addEventListener("click", () => {
-    $("topic").value = ""; $("title").value = ""; $("script").value = "";
-    status.textContent = ""; $("download").hidden = true;
+    $("topic").value = ""; $("title").value = ""; $("script").value = ""; status.textContent = "تمّ المسح. اكتب موضوع جديد.";
+    $("download").hidden = true; $("previewWrap").hidden = true; $("videoPreview").removeAttribute("src");
   });
-  window.addEventListener("error", event => {
-    status.textContent = "خطأ في صفحة الموقع: " + (event.message || "خطأ JavaScript");
-  });
-});
+  window.addEventListener("error", e => { status.textContent = "خطأ في صفحة الموقع: " + (e.message || "JavaScript"); });
+})();
 </script>
 </body></html>
