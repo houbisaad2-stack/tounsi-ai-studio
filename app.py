@@ -3,7 +3,7 @@ from pathlib import Path
 from flask import Flask, render_template, request, jsonify, send_file
 
 app = Flask(__name__)
-app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024
+app.config["MAX_CONTENT_LENGTH"] = 100 * 1024 * 1024
 OUTPUT_DIR = Path(tempfile.gettempdir()) / "tounsi-ai-studio"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -151,6 +151,50 @@ def render_video():
     try: audio_path.unlink(missing_ok=True)
     except Exception: pass
     return jsonify({"download_url": f"/download/{mp4_path.name}", "preview_url": f"/preview/{mp4_path.name}", "filename": mp4_path.name, "message": "الفيديو جاهز! تنجم تتفرّج فيه من المعاينة ولا تهبطو."})
+
+
+@app.post("/api/render-stock")
+def render_stock():
+    from werkzeug.utils import secure_filename
+    import tempfile
+    data_title = clean_text(request.form.get("title"), 120) or "Tounsi AI Studio"
+    script = clean_text(request.form.get("script"), 1500)
+    uploads = [f for f in request.files.getlist("clips") if f and f.filename]
+    if len(uploads) < 1:
+        return jsonify({"error": "حمّل مقطع فيديو واحد على الأقل من Pexels."}), 400
+    if len(uploads) > 4:
+        return jsonify({"error": "اختار 4 مقاطع كحدّ أقصى في المرّة."}), 400
+    if len(script) < 10:
+        return jsonify({"error": "حضّر النصّ قبل إنشاء الفيديو."}), 400
+    allowed = {".mp4", ".mov", ".webm", ".m4v"}
+    for f in uploads:
+        suffix = Path(secure_filename(f.filename)).suffix.lower()
+        if suffix not in allowed:
+            return jsonify({"error": "الملفات المقبولة: MP4 أو MOV أو WEBM."}), 400
+    uid = uuid.uuid4().hex[:12]
+    mp4_path = OUTPUT_DIR / f"tounsi_{uid}.mp4"
+    audio_path = OUTPUT_DIR / f"voice_{uid}.mp3"
+    try:
+        with tempfile.TemporaryDirectory(prefix="tounsi-stock-") as temp_dir:
+            input_paths = []
+            for index, file in enumerate(uploads):
+                path = Path(temp_dir) / f"clip_{index}{Path(secure_filename(file.filename)).suffix.lower()}"
+                file.save(path)
+                if path.stat().st_size > 25 * 1024 * 1024:
+                    return jsonify({"error": "كل مقطع لازم يكون أقل من 25 ميغابايت."}), 413
+                input_paths.append(path)
+            from stock_renderer import render_stock_video
+            render_stock_video(input_paths, data_title, script, mp4_path, audio_path)
+        try: audio_path.unlink(missing_ok=True)
+        except Exception: pass
+        if not mp4_path.is_file() or mp4_path.stat().st_size < 10000:
+            raise RuntimeError("ملف الفيديو النهائي ما تخلقش بالشكل الصحيح.")
+        return jsonify({"download_url": f"/download/{mp4_path.name}", "preview_url": f"/preview/{mp4_path.name}", "filename": mp4_path.name, "message": "الفيديو بالمشاهد جاهز للمعاينة والتنزيل."})
+    except Exception as exc:
+        for path in (mp4_path, audio_path):
+            try: path.unlink(missing_ok=True)
+            except Exception: pass
+        return jsonify({"error": "تعذّر تركيب مشاهد الفيديو: " + str(exc)[:220]}), 500
 
 @app.get("/preview/<name>")
 def preview(name):
