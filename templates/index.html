@@ -19,11 +19,18 @@
 <label for="title">عنوان الفيديو</label><input id="title" maxlength="120" placeholder="عنوان الفيديو">
 <label for="script">النصّ (تنجم تبدّلو قبل التصدير)</label><textarea id="script" rows="10" placeholder="النصّ متاع الفيديو يظهر هنا..."></textarea>
 <div class="actions"><button type="button" class="primary" id="render">🎬 أنشئ فيديو MP4</button><button type="button" class="secondary" id="clear">مسح</button></div>
+<div class="stock-box">
+<label for="stockClips">🎥 مشاهد فيديو حقيقية (اختياري)</label>
+<p class="stock-help">حمّل مقاطع MP4 من Pexels ثم اختار حتى 4 مقاطع هنا. الحدّ الأقصى 25MB لكل مقطع.</p>
+<input id="stockClips" type="file" accept="video/mp4,video/quicktime,video/webm,.m4v" multiple>
+<button type="button" class="primary stock-button" id="renderStock">🎬 أنشئ فيديو بمشاهد حقيقية</button>
+<p class="stock-help">الموقع يركّب المقاطع مع الصوت والترجمة في فيديو عمودي. ما يلزمكش مفتاح API.</p>
+</div>
 <div id="status" class="status" aria-live="polite">الموقع جاهز. اكتب موضوع، حضّر النصّ، وبعد اضغط على إنشاء فيديو MP4.</div>
 <a id="download" class="download" hidden>⬇️ نزّل الفيديو</a>
 <div id="previewWrap" class="preview-wrap" hidden><strong>معاينة الفيديو</strong><video id="videoPreview" controls playsinline preload="metadata"></video></div>
 </section>
-<section class="note"><strong>معلومة مهمّة</strong><p>الفيديو في النسخة هاذي بطاقة نصّية عمودية مع صوت عربي. توليد مشاهد سينمائية بالذكاء الاصطناعي والنشر الآلي على YouTube يحتاجان خدمات وصلاحيات إضافية.</p></section>
+<section class="note"><strong>معلومة مهمّة</strong><p>تنجم تصدّر بطاقة نصّية، أو تختار مقاطع فيديو حقيقية من مكتبة مجانية وتدمجها مع النصّ والصوت والترجمة. المشاهد المولّدة بالذكاء الاصطناعي والنشر الآلي على YouTube مرحلة لاحقة.</p></section>
 </main><footer>صُنع للمبدعين التوانسة 🇹🇳</footer>
 <script>
 (() => {
@@ -59,6 +66,45 @@
       if (! $("previewWrap").hidden) $("previewWrap").scrollIntoView({behavior:"smooth", block:"start"});
     } catch (e) { status.textContent = "تعذّر إنشاء الفيديو: " + e.message; }
     finally { renderButton.disabled = false; }
+  });
+  $("renderStock").addEventListener("click", async () => {
+    const files = $("stockClips").files;
+    if (!files || files.length < 1) {
+      status.textContent = "اختار مقطع فيديو واحد على الأقل من جهازك أولًا.";
+      return;
+    }
+    if (files.length > 4) {
+      status.textContent = "اختار 4 مقاطع كحدّ أقصى في المرّة.";
+      return;
+    }
+    if (!$("script").value.trim()) {
+      status.textContent = "حضّر النصّ أولًا، وبعد أنشئ الفيديو بالمشاهد.";
+      return;
+    }
+    const button = $("renderStock");
+    const oldText = button.textContent;
+    button.disabled = true; renderButton.disabled = true;
+    status.textContent = "نركّب المشاهد والصوت والترجمة... خلّي الصفحة محلولة. العملية تنجم تاخو شوية وقت.";
+    $("download").hidden = true; $("previewWrap").hidden = true;
+    try {
+      const form = new FormData();
+      form.append("title", $("title").value);
+      form.append("script", $("script").value);
+      Array.from(files).forEach(file => form.append("clips", file, file.name));
+      const response = await fetch("/api/render-stock", {method:"POST", body:form});
+      const raw = await response.text(); let result = {};
+      try { result = raw ? JSON.parse(raw) : {}; } catch (_) { throw new Error("ردّ الخادم موش مفهوم (HTTP " + response.status + ")."); }
+      if (!response.ok) throw new Error(result.error || ("فشل الطلب (HTTP " + response.status + ")."));
+      if (!result.download_url) throw new Error("الخادم ما رجّعش رابط الفيديو.");
+      $("download").href = result.download_url; $("download").hidden = false;
+      if (result.preview_url) { $("videoPreview").src = result.preview_url; $("previewWrap").hidden = false; }
+      status.textContent = result.message || "الفيديو بالمشاهد جاهز.";
+      $("previewWrap").scrollIntoView({behavior:"smooth", block:"start"});
+    } catch (e) {
+      status.textContent = "تعذّر إنشاء فيديو المشاهد: " + e.message;
+    } finally {
+      button.disabled = false; renderButton.disabled = false; button.textContent = oldText;
+    }
   });
   $("clear").addEventListener("click", () => {
     $("topic").value = ""; $("title").value = ""; $("script").value = ""; status.textContent = "تمّ المسح. اكتب موضوع جديد.";
