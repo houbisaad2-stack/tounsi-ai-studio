@@ -138,7 +138,16 @@ def render_video():
         except Exception: pass
     try: audio_path.unlink(missing_ok=True)
     except Exception: pass
-    return jsonify({"download_url": f"/download/{mp4_path.name}", "filename": mp4_path.name, "message": "الفيديو جاهز للتنزيل."})
+    return jsonify({"download_url": f"/download/{mp4_path.name}", "preview_url": f"/preview/{mp4_path.name}", "filename": mp4_path.name, "message": "الفيديو جاهز! تنجم تتفرّج فيه من المعاينة ولا تهبطو."})
+
+@app.get("/preview/<name>")
+def preview(name):
+    if not re.fullmatch(r"tounsi_[a-f0-9]{12}\.mp4", name):
+        return "Not found", 404
+    path = OUTPUT_DIR / name
+    if not path.is_file():
+        return "انتهت صلاحية الملف أو لم يعد موجودًا. أنشئ الفيديو من جديد.", 404
+    return send_file(path, as_attachment=False, mimetype="video/mp4", conditional=True)
 
 @app.get("/download/<name>")
 def download(name):
