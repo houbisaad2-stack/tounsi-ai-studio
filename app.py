@@ -127,7 +127,7 @@ def render_video():
         except Exception:
             # Compatibility fallback: generic Arabic TTS; it may not sound Tunisian.
             try:
-                gTTS(text=(title + ". " + script)[:900], lang="ar").save(str(audio_path))
+                gTTS(text=(title + ". " + script)[:900], lang="ar", timeout=(3, 5)).save(str(audio_path))
                 audio = AudioFileClip(str(audio_path))
             except Exception:
                 audio = None
