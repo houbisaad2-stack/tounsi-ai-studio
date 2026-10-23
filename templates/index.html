@@ -5,6 +5,14 @@
 <meta name="theme-color" content="#101827">
 <title>Tounsi AI Studio</title>
 <link rel="stylesheet" href="/static/style.css?v=20261023-images">
+<style>
+.scene-gallery{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:12px 0}
+.scene-card{padding:0;border:2px solid transparent;border-radius:12px;overflow:hidden;background:#172033;color:#fff;text-align:right;cursor:pointer}
+.scene-card img{display:block;width:100%;height:120px;object-fit:cover}
+.scene-card span{display:block;padding:9px;font-size:14px}
+.scene-card.selected{border-color:#f4b942;box-shadow:0 0 0 2px #f4b94233}
+@media(min-width:650px){.scene-gallery{grid-template-columns:repeat(4,minmax(0,1fr))}}
+</style>
 </head>
 <body>
 <header class="top"><div class="brand"><span class="logo">✦</span><div><strong>Tounsi AI Studio</strong><small>من الفكرة للفيديو</small></div></div><span class="pill">نسخة تجريبية</span></header>
@@ -27,8 +35,16 @@
 <p class="stock-help">الموقع يركّب المقاطع مع الصوت والترجمة في فيديو عمودي. ما يلزمكش مفتاح API.</p>
 </div>
 <div class="stock-box">
-<label for="sceneImages">🖼️ صور المشاهد المولّدة</label>
-<p class="stock-help">اختار حتى 8 صور من جهازك (PNG/JPG/WEBP، أقل من 10MB للصورة). الفيديو يركّبهم مع النصّ والصوت والترجمة.</p>
+<label for="sceneImages">🖼️ معرض صور جاهزة</label>
+<p class="stock-help">اختار صور من المعرض مباشرة، أو زِد صورك من الهاتف. الصور المختارة تتدمج في فيديو عمودي.</p>
+<div id="sceneGallery" class="scene-gallery" aria-label="معرض صور جاهزة">
+  <button type="button" class="scene-card" data-image="https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=900&q=85"><img src="https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=360&q=75" alt="مشهد قهوة ومطعم"><span>☕ قهوة ولمّة</span></button>
+  <button type="button" class="scene-card" data-image="https://images.unsplash.com/photo-1529156069898-49953e39b3ac?auto=format&fit=crop&w=900&q=85"><img src="https://images.unsplash.com/photo-1529156069898-49953e39b3ac?auto=format&fit=crop&w=360&q=75" alt="أصحاب مع بعضهم"><span>👥 صحاب</span></button>
+  <button type="button" class="scene-card" data-image="https://images.unsplash.com/photo-1564769625905-50e93615e769?auto=format&fit=crop&w=900&q=85"><img src="https://images.unsplash.com/photo-1564769625905-50e93615e769?auto=format&fit=crop&w=360&q=75" alt="مسجد"><span>🌙 ديني</span></button>
+  <button type="button" class="scene-card" data-image="https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=900&q=85"><img src="https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=360&q=75" alt="منظر طبيعي"><span>🌿 طبيعة</span></button>
+</div>
+<p id="galleryHint" class="stock-help">ما ثماش صور مختارة من المعرض.</p>
+<label for="sceneImages">أو اختار صور من جهازك</label>
 <input id="sceneImages" type="file" accept="image/png,image/jpeg,image/webp" multiple>
 <button type="button" class="primary stock-button" id="renderImages">🎬 حوّل الصور لفيديو</button>
 </div>
@@ -112,10 +128,26 @@
       button.disabled = false; renderButton.disabled = false; button.textContent = oldText;
     }
   });
+  const selectedGallery = new Map();
+  document.querySelectorAll(".scene-card").forEach(card => card.addEventListener("click", () => {
+    const url = card.dataset.image;
+    if (selectedGallery.has(url)) {
+      selectedGallery.delete(url); card.classList.remove("selected");
+    } else if (selectedGallery.size < 8) {
+      selectedGallery.set(url, card.querySelector("span").textContent.trim());
+      card.classList.add("selected");
+    } else {
+      status.textContent = "تنجم تختار حتى 8 صور من المعرض.";
+    }
+    $("galleryHint").textContent = selectedGallery.size
+      ? "اخترت " + selectedGallery.size + " صور من المعرض."
+      : "ما ثماش صور مختارة من المعرض.";
+  }));
   $("renderImages").addEventListener("click", async () => {
-    const files = $("sceneImages").files;
-    if (!files || !files.length) { status.textContent = "اختار صور المشاهد أوّلًا."; return; }
-    if (files.length > 8) { status.textContent = "اختار 8 صور كحدّ أقصى."; return; }
+    const files = Array.from($("sceneImages").files || []);
+    const galleryCount = selectedGallery.size;
+    if (!files.length && !galleryCount) { status.textContent = "اختار صور من المعرض أو من جهازك أوّلًا."; return; }
+    if (files.length + galleryCount > 8) { status.textContent = "المجموع لازم ما يفوتش 8 صور."; return; }
     if (!$("script").value.trim()) { status.textContent = "حضّر النصّ أوّلًا."; return; }
     const button = $("renderImages");
     button.disabled = true; renderButton.disabled = true;
@@ -125,7 +157,14 @@
       const form = new FormData();
       form.append("title", $("title").value);
       form.append("script", $("script").value);
-      Array.from(files).forEach(file => form.append("images", file, file.name));
+      files.forEach(file => form.append("images", file, file.name));
+      for (const [url, label] of selectedGallery.entries()) {
+        const imageResponse = await fetch(url);
+        if (!imageResponse.ok) throw new Error("ما نجّمتش نهبط صورة من المعرض: " + label);
+        const blob = await imageResponse.blob();
+        const ext = blob.type.includes("png") ? "png" : "jpg";
+        form.append("images", blob, "gallery-" + selectedGallery.size + "-" + ext);
+      }
       const response = await fetch("/api/render-images", {method:"POST", body:form});
       const raw = await response.text(); let result = {};
       try { result = raw ? JSON.parse(raw) : {}; } catch (_) { throw new Error("ردّ الخادم موش مفهوم (HTTP " + response.status + ")."); }
