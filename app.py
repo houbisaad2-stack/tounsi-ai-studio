@@ -1,9 +1,11 @@
 import os, re, tempfile, uuid
 from pathlib import Path
 from flask import Flask, render_template, request, jsonify, send_file
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("APP_SECRET_KEY") or uuid.uuid4().hex + uuid.uuid4().hex
+app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 app.config["MAX_CONTENT_LENGTH"] = 110 * 1024 * 1024
 OUTPUT_DIR = Path(tempfile.gettempdir()) / "tounsi-ai-studio"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -256,16 +258,16 @@ def _youtube_credentials():
         return None, "YouTube OAuth is not configured: set YOUTUBE_CLIENT_JSON in Render."
     token_data = None
     token_json = os.environ.get("YOUTUBE_TOKEN_JSON", "").strip()
-    if token_json:
-        try:
-            token_data = json.loads(token_json)
-        except Exception:
-            return None, "YOUTUBE_TOKEN_JSON is not valid JSON."
-    elif YOUTUBE_TOKEN_PATH.is_file():
+    if YOUTUBE_TOKEN_PATH.is_file():
         try:
             token_data = json.loads(YOUTUBE_TOKEN_PATH.read_text(encoding="utf-8"))
         except Exception:
             token_data = None
+    elif token_json:
+        try:
+            token_data = json.loads(token_json)
+        except Exception:
+            return None, "YOUTUBE_TOKEN_JSON is not valid JSON."
     if not token_data:
         return None, "YouTube channel is not connected yet."
     try:
