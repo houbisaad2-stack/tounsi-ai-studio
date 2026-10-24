@@ -335,7 +335,7 @@ def youtube_publish():
         return jsonify({"error": "كلمة حماية النشر غير صحيحة."}), 403
     data = request.get_json(silent=True) or {}
     filename = str(data.get("filename", ""))
-    if not re.fullmatch(r"tounsi_[a-f0-9]{12}\\.mp4", filename):
+    if not re.fullmatch(r"tounsi_[a-f0-9]{12}\.mp4", filename):
         return jsonify({"error": "اسم ملف الفيديو غير صالح."}), 400
     video_path = OUTPUT_DIR / filename
     if not video_path.is_file():
