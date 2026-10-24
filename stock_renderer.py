@@ -53,12 +53,18 @@ def render_stock_video(video_paths, title, script, output_path, audio_path):
             audio = AudioFileClip(str(audio_path))
         except Exception:
             try:
-                gTTS(text=spoken_text, lang="ar").save(str(audio_path))
+                gTTS(text=spoken_text, lang="ar", timeout=(5, 15)).save(str(audio_path))
+                if not Path(audio_path).is_file() or Path(audio_path).stat().st_size < 1000:
+                    raise RuntimeError("خدمة الصوت ما أنشأتش ملفًا صالحًا")
                 audio = AudioFileClip(str(audio_path))
             except Exception:
                 audio = None
 
-        duration = min(30, max(8, audio.duration if audio is not None else min(joined.duration, 20)))
+        # Do not silently export a video without the requested narration.
+        if audio is None:
+            raise RuntimeError("تعذّر توليد التعليق الصوتي. يلزم اتصال إنترنت بخدمة الصوت؛ جرّب مرّة أخرى.")
+
+        duration = min(30, max(8, audio.duration))
         if joined.duration < duration:
             base = joined.fx(vfx.loop, duration=duration)
         else:
