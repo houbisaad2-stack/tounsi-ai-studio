@@ -420,3 +420,32 @@ def download(name):
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+
+
+@app.post("/api/render-cartoon")
+def render_cartoon():
+    data = request.get_json(silent=True) or {}
+    title = clean_text(data.get("title"), 90) or "حكاية تونسية"
+    script = clean_text(data.get("script"), 700)
+    if len(script) < 8:
+        return jsonify({"error": "اكتب نصّ تونسي قصير قبل إنشاء الفيديو."}), 400
+    uid = uuid.uuid4().hex[:12]
+    mp4_path = OUTPUT_DIR / f"cartoon_{uid}.mp4"
+    audio_path = OUTPUT_DIR / f"cartoon_voice_{uid}.mp3"
+    try:
+        from cartoon_renderer import render_cartoon_video
+        render_cartoon_video(title, script, mp4_path, audio_path)
+        if not mp4_path.is_file() or mp4_path.stat().st_size < 10000:
+            raise RuntimeError("ملف MP4 ما تخلقش بالشكل الصحيح.")
+        return jsonify({
+            "download_url": f"/download/{mp4_path.name}",
+            "preview_url": f"/preview/{mp4_path.name}",
+            "filename": mp4_path.name,
+            "message": "الفيديو الكرتوني التجريبي جاهز للمعاينة والتنزيل."
+        })
+    except Exception as exc:
+        try: mp4_path.unlink(missing_ok=True)
+        except Exception: pass
+        try: audio_path.unlink(missing_ok=True)
+        except Exception: pass
+        return jsonify({"error": "تعذّر إنشاء الفيديو الكرتوني: " + str(exc)[:220]}), 500
