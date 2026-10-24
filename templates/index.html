@@ -48,6 +48,23 @@
 <input id="sceneImages" type="file" accept="image/png,image/jpeg,image/webp" multiple>
 <button type="button" class="primary stock-button" id="renderImages">🎬 حوّل الصور لفيديو</button>
 </div>
+
+<div class="stock-box" id="youtubeBox">
+<label>📺 ربط YouTube والنشر</label>
+<p class="stock-help">بعد إعداد OAuth في Google وRender، اربط قناتك. الفيديو ما يتنشرش وحده إلا كي تضغط على زر النشر.</p>
+<div class="row"><a class="secondary" href="/youtube/connect" id="youtubeConnect" style="text-decoration:none;display:inline-block">🔗 اربط قناة YouTube</a><span id="youtubeStatus" class="hint">نتثبتوا من حالة الربط...</span></div>
+<label for="publishPassword">كلمة حماية النشر (تضبطها في Render باسم PUBLISH_PASSWORD)</label>
+<input id="publishPassword" type="password" autocomplete="current-password" placeholder="كلمة حماية النشر">
+<label for="youtubePrivacy">خصوصية الفيديو عند النشر</label>
+<select id="youtubePrivacy" style="width:100%;background:#0a1221;color:var(--text);border:1px solid #34445d;border-radius:12px;padding:13px;font:inherit">
+<option value="private">خاص — Private (الأكثر أمانًا)</option>
+<option value="unlisted">غير مدرج — Unlisted</option>
+<option value="public">عام — Public</option>
+</select>
+<button type="button" class="primary stock-button" id="publishYoutube" disabled>🚀 انشر آخر فيديو على YouTube</button>
+<p class="stock-help">النشر محمي بكلمة سر. الفيديوهات تنشر خاص افتراضيًا، وتنجم تبدّل الخصوصية قبل النشر.</p>
+</div>
+
 <div id="status" class="status" aria-live="polite">الموقع جاهز. اكتب موضوع، حضّر النصّ، وبعد اضغط على إنشاء فيديو MP4.</div>
 <a id="download" class="download" hidden>⬇️ نزّل الفيديو</a>
 <div id="previewWrap" class="preview-wrap" hidden><strong>معاينة الفيديو</strong><video id="videoPreview" controls playsinline preload="metadata"></video></div>
@@ -58,6 +75,7 @@
 (() => {
   const $ = id => document.getElementById(id), status = $("status"), renderButton = $("render");
   let mode = "كوميديا تونسية";
+  let lastFilename = "";
   document.querySelectorAll(".mode").forEach(b => b.addEventListener("click", () => {
     document.querySelectorAll(".mode").forEach(x => x.classList.remove("active"));
     b.classList.add("active"); mode = b.dataset.mode || "كوميديا تونسية";
@@ -81,6 +99,7 @@
     $("download").hidden = true; $("previewWrap").hidden = true;
     try {
       const r = await post("/api/render", {title:$("title").value, script:$("script").value});
+      lastFilename = r.filename || ""; $("publishYoutube").disabled = !lastFilename;
       if (!r.download_url) throw new Error("الخادم ما رجّعش رابط الفيديو.");
       $("download").href = r.download_url; $("download").hidden = false;
       if (r.preview_url) { $("videoPreview").src = r.preview_url; $("previewWrap").hidden = false; }
@@ -118,6 +137,7 @@
       try { result = raw ? JSON.parse(raw) : {}; } catch (_) { throw new Error("ردّ الخادم موش مفهوم (HTTP " + response.status + ")."); }
       if (!response.ok) throw new Error(result.error || ("فشل الطلب (HTTP " + response.status + ")."));
       if (!result.download_url) throw new Error("الخادم ما رجّعش رابط الفيديو.");
+      lastFilename = result.filename || ""; $("publishYoutube").disabled = !lastFilename;
       $("download").href = result.download_url; $("download").hidden = false;
       if (result.preview_url) { $("videoPreview").src = result.preview_url; $("previewWrap").hidden = false; }
       status.textContent = result.message || "الفيديو بالمشاهد جاهز.";
@@ -187,6 +207,7 @@
       try { result = raw ? JSON.parse(raw) : {}; } catch (_) { throw new Error("ردّ الخادم موش مفهوم (HTTP " + response.status + ")."); }
       if (!response.ok) throw new Error(result.error || ("فشل الطلب (HTTP " + response.status + ")."));
       $("download").href = result.download_url; $("download").hidden = false;
+      lastFilename = result.filename || ""; $("publishYoutube").disabled = !lastFilename;
       if (result.preview_url) { $("videoPreview").src = result.preview_url; $("previewWrap").hidden = false; }
       status.textContent = result.message || "الفيديو جاهز.";
       $("previewWrap").scrollIntoView({behavior:"smooth", block:"start"});
@@ -197,6 +218,41 @@
     $("topic").value = ""; $("title").value = ""; $("script").value = ""; status.textContent = "تمّ المسح. اكتب موضوع جديد.";
     $("download").hidden = true; $("previewWrap").hidden = true; $("videoPreview").removeAttribute("src");
   });
+
+  async function refreshYoutubeStatus() {
+    try {
+      const response = await fetch("/api/youtube/status");
+      const state = await response.json();
+      $("youtubeStatus").textContent = state.connected ? "✅ القناة مربوطة" : (state.message || "يلزم إعداد الربط");
+      $("youtubeConnect").style.opacity = state.configured ? "1" : ".65";
+    } catch (_) { $("youtubeStatus").textContent = "تعذّر التثبت من الربط."; }
+  }
+  $("publishYoutube").addEventListener("click", async () => {
+    if (!lastFilename) { status.textContent = "أنشئ فيديو أوّلًا قبل النشر."; return; }
+    const password = $("publishPassword").value;
+    if (!password) { status.textContent = "اكتب كلمة حماية النشر اللي حطّيتها في Render."; return; }
+    const button = $("publishYoutube");
+    button.disabled = true; status.textContent = "نرفع الفيديو إلى YouTube... ما تسكّرش الصفحة.";
+    try {
+      const response = await fetch("/api/youtube/publish", {
+        method:"POST", headers:{"Content-Type":"application/json","X-Publish-Password":password},
+        body:JSON.stringify({filename:lastFilename,title:$("title").value,description:$("script").value,privacy:$("youtubePrivacy").value})
+      });
+      const raw = await response.text(); let result = {};
+      try { result = raw ? JSON.parse(raw) : {}; } catch (_) { throw new Error("ردّ الخادم موش مفهوم (HTTP " + response.status + ")."); }
+      if (!response.ok) throw new Error(result.error || "فشل النشر.");
+      status.textContent = "تمّ رفع الفيديو. الرابط: " + result.url;
+      const link = document.createElement("a"); link.href = result.url; link.target = "_blank"; link.rel = "noopener"; link.textContent = "افتح الفيديو على YouTube";
+      link.style.display = "block"; link.style.marginTop = "10px"; link.style.color = "var(--gold)";
+      $("youtubeBox").appendChild(link);
+    } catch (e) { status.textContent = "تعذّر النشر: " + e.message; }
+    finally { button.disabled = !lastFilename; }
+  });
+  if (new URLSearchParams(window.location.search).get("youtube") === "connected") {
+    status.textContent = "تمّ ربط YouTube. أنشئ فيديو ثم انشره.";
+  }
+  refreshYoutubeStatus();
+
   window.addEventListener("error", e => { status.textContent = "خطأ في صفحة الموقع: " + (e.message || "JavaScript"); });
 })();
 </script>
