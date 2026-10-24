@@ -29,7 +29,7 @@
 <div class="actions"><button type="button" class="primary" id="render">🎬 أنشئ فيديو MP4</button><button type="button" class="secondary" id="clear">مسح</button></div>
 <div class="stock-box">
 <label for="stockClips">🎥 مشاهد فيديو حقيقية (اختياري)</label>
-<p class="stock-help">حمّل مقاطع MP4 من Pexels ثم اختار حتى 4 مقاطع هنا. الحدّ الأقصى 25MB لكل مقطع.</p>
+<p class="stock-help">حمّل مقاطع MP4 من Pexels ثم اختار حتى مقطعين هنا. الحدّ الأقصى 15MB لكل مقطع.</p>
 <input id="stockClips" type="file" accept="video/mp4,video/quicktime,video/webm,.m4v" multiple>
 <button type="button" class="primary stock-button" id="renderStock">🎬 أنشئ فيديو بمشاهد حقيقية</button>
 <p class="stock-help">الموقع يركّب المقاطع مع الصوت والترجمة في فيديو عمودي. ما يلزمكش مفتاح API.</p>
@@ -114,8 +114,8 @@
       status.textContent = "اختار مقطع فيديو واحد على الأقل من جهازك أولًا.";
       return;
     }
-    if (files.length > 4) {
-      status.textContent = "اختار 4 مقاطع كحدّ أقصى في المرّة.";
+    if (files.length > 2) {
+      status.textContent = "اختار مقطعين كحدّ أقصى في المرّة.";
       return;
     }
     if (!$("script").value.trim()) {
