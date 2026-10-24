@@ -17,7 +17,7 @@
 <body>
 <header class="top"><div class="brand"><span class="logo">✦</span><div><strong>Tounsi AI Studio</strong><small>من الفكرة للفيديو</small></div></div><span class="pill">نسخة تجريبية</span></header>
 <main>
-<section class="hero"><p class="eyebrow">صناعة محتوى تونسي أسهل</p><h1>فكرتك تولّي <span>فيديو</span></h1><p class="sub">حضّر النصّ، راجعه، وصدّر فيديو عمودي مع صوت عربي.</p>
+<section class="hero"><p class="eyebrow">صناعة محتوى تونسي أسهل</p><h1>فكرتك تولّي <span>فيديو</span></h1><p class="sub">ركّب مقاطع فيديو حقيقية مع تعليق صوتي تونسي وترجمة ومونتاج، وصدّر MP4 عمودي.</p>
 <div class="modes" role="group" aria-label="نوع المحتوى">
 <button class="mode active" data-mode="كوميديا تونسية">😂 كوميديا</button><button class="mode" data-mode="محتوى ديني">🌙 ديني</button><button class="mode" data-mode="محتوى تعليمي">📚 تعليمي</button>
 </div></section>
@@ -26,13 +26,14 @@
 <div class="row"><button type="button" class="primary" id="generate">✨ حضّرلي نصّ</button><span class="hint">قوالب محلية — دون API مدفوع</span></div>
 <label for="title">عنوان الفيديو</label><input id="title" maxlength="120" placeholder="عنوان الفيديو">
 <label for="script">النصّ (تنجم تبدّلو قبل التصدير)</label><textarea id="script" rows="10" placeholder="النصّ متاع الفيديو يظهر هنا..."></textarea>
-<div class="actions"><button type="button" class="primary" id="render">🎬 أنشئ فيديو MP4</button><button type="button" class="secondary" id="clear">مسح</button></div>
+<div class="actions"><button type="button" class="primary" id="render">🪧 أنشئ بطاقات نصّية (موش فيديو حقيقي)</button><button type="button" class="secondary" id="clear">مسح</button></div>
 <div class="stock-box">
-<label for="stockClips">🎥 مشاهد فيديو حقيقية (اختياري)</label>
-<p class="stock-help">حمّل مقاطع MP4 من Pexels ثم اختار حتى مقطعين هنا. الحدّ الأقصى 15MB لكل مقطع.</p>
+<label for="stockClips">🎥 صناعة فيديو حقيقي — الخيار الأساسي</label>
+<p class="stock-help">حمّل مقاطع متحرّكة مجانية من Pexels، ثم اختار حتى مقطعين من هاتفك. الموقع يضيف التعليق الصوتي والترجمة ويحوّلهم إلى فيديو MP4 عمودي. الحدّ الأقصى 15MB لكل مقطع.</p>
+<p class="stock-help"><a href="https://www.pexels.com/videos/" target="_blank" rel="noopener noreferrer">افتح مكتبة فيديوهات Pexels المجانية ↗</a> — نزّل فيديو MP4 ثم ارجع لهنا وارفعه.</p>
 <input id="stockClips" type="file" accept="video/mp4,video/quicktime,video/webm,.m4v" multiple>
 <button type="button" class="primary stock-button" id="renderStock">🎬 أنشئ فيديو بمشاهد حقيقية</button>
-<p class="stock-help">الموقع يركّب المقاطع مع الصوت والترجمة في فيديو عمودي. ما يلزمكش مفتاح API.</p>
+<p class="stock-help">هذا الخيار هو اللي يعطيك لقطات متحرّكة حقيقية. ما يلزمكش مفتاح API أو اشتراك مدفوع.</p>
 </div>
 <div class="stock-box">
 <label for="sceneImages">🖼️ معرض صور جاهزة</label>
@@ -69,7 +70,7 @@
 <a id="download" class="download" hidden>⬇️ نزّل الفيديو</a>
 <div id="previewWrap" class="preview-wrap" hidden><strong>معاينة الفيديو</strong><video id="videoPreview" controls playsinline preload="metadata"></video></div>
 </section>
-<section class="note"><strong>معلومة مهمّة</strong><p>تنجم تصدّر بطاقة نصّية، أو تختار مقاطع فيديو حقيقية من مكتبة مجانية وتدمجها مع النصّ والصوت والترجمة. المشاهد المولّدة بالذكاء الاصطناعي والنشر الآلي على YouTube مرحلة لاحقة.</p></section>
+<section class="note"><strong>معلومة مهمّة</strong><p>للحصول على فيديو حقيقي، استعمل قسم «صناعة فيديو حقيقي» وحمّل مقاطع متحرّكة من Pexels. زرّ «بطاقات نصّية» لا يصنع مشاهد فيديو حقيقية. التعليق الصوتي يحتاج اتصال إنترنت؛ إذا فشلت خدمة الصوت، راجع رسالة الخطأ أو أعد المحاولة.</p></section>
 </main><footer>صُنع للمبدعين التوانسة 🇹🇳</footer>
 <script>
 (() => {
