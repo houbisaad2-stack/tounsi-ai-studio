@@ -3,6 +3,7 @@ from pathlib import Path
 from flask import Flask, render_template, request, jsonify, send_file
 
 app = Flask(__name__)
+app.secret_key = os.environ.get("APP_SECRET_KEY") or uuid.uuid4().hex + uuid.uuid4().hex
 app.config["MAX_CONTENT_LENGTH"] = 110 * 1024 * 1024
 OUTPUT_DIR = Path(tempfile.gettempdir()) / "tounsi-ai-studio"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -237,6 +238,132 @@ def render_images():
             try: path.unlink(missing_ok=True)
             except Exception: pass
         return jsonify({"error": "تعذّر تركيب فيديو الصور: " + str(exc)[:220]}), 500
+
+
+# YouTube OAuth and publishing. Secrets are supplied only through Render environment variables.
+import hmac
+import json
+from flask import redirect, session, url_for
+
+YOUTUBE_TOKEN_PATH = OUTPUT_DIR / "youtube-token.json"
+YOUTUBE_SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
+
+def _youtube_credentials():
+    from google.oauth2.credentials import Credentials
+    from google.auth.transport.requests import Request
+    client_json = os.environ.get("YOUTUBE_CLIENT_JSON", "").strip()
+    if not client_json:
+        return None, "YouTube OAuth is not configured: set YOUTUBE_CLIENT_JSON in Render."
+    token_data = None
+    token_json = os.environ.get("YOUTUBE_TOKEN_JSON", "").strip()
+    if token_json:
+        try:
+            token_data = json.loads(token_json)
+        except Exception:
+            return None, "YOUTUBE_TOKEN_JSON is not valid JSON."
+    elif YOUTUBE_TOKEN_PATH.is_file():
+        try:
+            token_data = json.loads(YOUTUBE_TOKEN_PATH.read_text(encoding="utf-8"))
+        except Exception:
+            token_data = None
+    if not token_data:
+        return None, "YouTube channel is not connected yet."
+    try:
+        client_data = json.loads(client_json)
+        client = client_data.get("web") or client_data.get("installed") or {}
+        creds = Credentials.from_authorized_user_info(token_data, YOUTUBE_SCOPES)
+        if creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+            YOUTUBE_TOKEN_PATH.write_text(creds.to_json(), encoding="utf-8")
+        return creds, None
+    except Exception as exc:
+        return None, "Could not load YouTube authorization: " + str(exc)[:160]
+
+@app.get("/api/youtube/status")
+def youtube_status():
+    if not os.environ.get("YOUTUBE_CLIENT_JSON"):
+        return jsonify({"configured": False, "connected": False, "message": "أضف YOUTUBE_CLIENT_JSON في إعدادات Render أولًا."})
+    creds, error = _youtube_credentials()
+    return jsonify({"configured": True, "connected": creds is not None, "message": "قناة YouTube مربوطة." if creds else error})
+
+@app.get("/youtube/connect")
+def youtube_connect():
+    client_json = os.environ.get("YOUTUBE_CLIENT_JSON", "").strip()
+    if not client_json:
+        return "Set YOUTUBE_CLIENT_JSON in Render before connecting YouTube.", 503
+    try:
+        from google_auth_oauthlib.flow import Flow
+        client_data = json.loads(client_json)
+        callback_uri = request.url_root.rstrip("/") + "/youtube/callback"
+        flow = Flow.from_client_config(client_data, scopes=YOUTUBE_SCOPES, redirect_uri=callback_uri)
+        authorization_url, state = flow.authorization_url(access_type="offline", include_granted_scopes="true", prompt="consent")
+        session["youtube_oauth_state"] = state
+        session["youtube_redirect_uri"] = callback_uri
+        return redirect(authorization_url)
+    except Exception as exc:
+        return "تعذّر بدء ربط YouTube: " + str(exc)[:240], 500
+
+@app.get("/youtube/callback")
+def youtube_callback():
+    expected_state = session.get("youtube_oauth_state")
+    if not expected_state or request.args.get("state") != expected_state:
+        return "OAuth state غير صالح. ارجع للموقع وعاود ربط YouTube.", 400
+    try:
+        from google_auth_oauthlib.flow import Flow
+        flow = Flow.from_client_config(json.loads(os.environ["YOUTUBE_CLIENT_JSON"]), scopes=YOUTUBE_SCOPES,
+                                       state=expected_state, redirect_uri=session.get("youtube_redirect_uri"))
+        flow.fetch_token(authorization_response=request.url)
+        creds = flow.credentials
+        if not creds.refresh_token:
+            return "Google ما رجّعش refresh token. عاود الربط مع prompt=consent وتأكد من إعداد OAuth.", 400
+        YOUTUBE_TOKEN_PATH.write_text(creds.to_json(), encoding="utf-8")
+        session.pop("youtube_oauth_state", None)
+        session.pop("youtube_redirect_uri", None)
+        return redirect("/?youtube=connected")
+    except Exception as exc:
+        return "فشل ربط YouTube: " + str(exc)[:240], 500
+
+@app.post("/api/youtube/publish")
+def youtube_publish():
+    required_password = os.environ.get("PUBLISH_PASSWORD", "")
+    supplied_password = request.headers.get("X-Publish-Password", "")
+    if not required_password:
+        return jsonify({"error": "لأمان القناة، أضف PUBLISH_PASSWORD في Render قبل النشر."}), 503
+    if not hmac.compare_digest(supplied_password, required_password):
+        return jsonify({"error": "كلمة حماية النشر غير صحيحة."}), 403
+    data = request.get_json(silent=True) or {}
+    filename = str(data.get("filename", ""))
+    if not re.fullmatch(r"tounsi_[a-f0-9]{12}\\.mp4", filename):
+        return jsonify({"error": "اسم ملف الفيديو غير صالح."}), 400
+    video_path = OUTPUT_DIR / filename
+    if not video_path.is_file():
+        return jsonify({"error": "ملف الفيديو انتهى أو غير موجود. أنشئه من جديد."}), 404
+    creds, error = _youtube_credentials()
+    if not creds:
+        return jsonify({"error": error or "اربط قناة YouTube أولًا."}), 409
+    try:
+        from googleapiclient.discovery import build
+        from googleapiclient.http import MediaFileUpload
+        title = clean_text(data.get("title"), 100) or "فيديو تونسي جديد"
+        description = clean_text(data.get("description"), 4000) or "صُنع باستخدام Tounsi AI Studio 🇹🇳"
+        privacy = data.get("privacy", "private")
+        if privacy not in ("private", "unlisted", "public"):
+            privacy = "private"
+        youtube = build("youtube", "v3", credentials=creds, cache_discovery=False)
+        request_upload = youtube.videos().insert(
+            part="snippet,status",
+            body={"snippet": {"title": title, "description": description, "categoryId": "23",
+                              "defaultLanguage": "ar"},
+                  "status": {"privacyStatus": privacy, "selfDeclaredMadeForKids": False}},
+            media_body=MediaFileUpload(str(video_path), mimetype="video/mp4", resumable=True)
+        )
+        response = request_upload.execute()
+        return jsonify({"success": True, "video_id": response.get("id"),
+                        "url": "https://www.youtube.com/watch?v=" + response["id"],
+                        "privacy": privacy, "message": "تمّ إرسال الفيديو إلى YouTube."})
+    except Exception as exc:
+        return jsonify({"error": "فشل رفع الفيديو: " + str(exc)[:240]}), 502
+
 
 @app.get("/preview/<name>")
 def preview(name):
