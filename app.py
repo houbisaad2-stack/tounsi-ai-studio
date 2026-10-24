@@ -77,83 +77,116 @@ def render_video():
     try:
         from PIL import Image, ImageDraw, ImageFont
         import numpy as np
-        from moviepy.editor import ImageClip, AudioFileClip
-        from gtts import gTTS
+        from moviepy.editor import ImageClip, AudioFileClip, concatenate_videoclips
         import asyncio
         import edge_tts
+        from gtts import gTTS
     except Exception as exc:
         return jsonify({"error": "مكتبات الفيديو غير جاهزة على الخادم. راجع سجلّات Render. " + str(exc)[:160]}), 500
+
     uid = uuid.uuid4().hex[:12]
     mp4_path = OUTPUT_DIR / f"tounsi_{uid}.mp4"
     audio_path = OUTPUT_DIR / f"tounsi_{uid}.mp3"
     W, H = 540, 960
-    image = Image.new("RGB", (W, H), "#101827")
-    draw = ImageDraw.Draw(image)
     font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
     try:
-        title_font = ImageFont.truetype(font_path, 38)
-        body_font = ImageFont.truetype(font_path, 25)
+        title_font = ImageFont.truetype(font_path, 31)
+        body_font = ImageFont.truetype(font_path, 27)
         small_font = ImageFont.truetype(font_path, 18)
     except Exception:
         title_font = body_font = small_font = ImageFont.load_default()
-    draw.rounded_rectangle((28, 28, W-28, H-28), radius=32, outline="#f4b942", width=3)
-    draw.text((W//2, 92), "TOUNSI AI STUDIO", font=small_font, fill="#f4b942", anchor="mm")
-    draw.text((W//2, 170), title[:50], font=title_font, fill="white", anchor="mm")
-    lines, current = [], ""
-    for word in script.split():
-        candidate = (current + " " + word).strip()
-        if len(candidate) > 30:
-            if current: lines.append(current)
-            current = word
-        else:
-            current = candidate
-    if current: lines.append(current)
-    y = 280
-    for line in lines[:19]:
-        draw.text((W//2, y), line, font=body_font, fill="#e5e7eb", anchor="mm")
-        y += 42
-    draw.text((W//2, H-105), "تابعنا للمزيد", font=small_font, fill="#f4b942", anchor="mm", direction="rtl")
-    frame = np.array(image)
+
     audio = None
-    clip = None
+    final = None
+    scenes = []
     try:
-        # Audio is optional: if the free text-to-speech service is unreachable,
-        # still create a valid MP4 instead of failing the entire export.
+        spoken_text = (title + ". " + script)[:900]
         try:
-            # Prefer Microsoft's Tunisian Arabic male voice when the free Edge TTS endpoint is reachable.
-            spoken_text = (title + ". " + script)[:900]
             async def save_tunisian_voice():
-                communicate = edge_tts.Communicate(spoken_text, voice="ar-TN-HediNeural", rate="+0%", volume="+0%")
-                await communicate.save(str(audio_path))
+                task = edge_tts.Communicate(spoken_text, voice="ar-TN-HediNeural", rate="+0%", volume="+0%")
+                await asyncio.wait_for(task.save(str(audio_path)), timeout=18)
             asyncio.run(save_tunisian_voice())
-            audio = AudioFileClip(str(audio_path))
-        except Exception:
-            # Compatibility fallback: generic Arabic TTS; it may not sound Tunisian.
-            try:
-                gTTS(text=(title + ". " + script)[:900], lang="ar", timeout=(3, 5)).save(str(audio_path))
+            if audio_path.is_file() and audio_path.stat().st_size > 1000:
                 audio = AudioFileClip(str(audio_path))
+        except Exception:
+            audio = None
+        if audio is None:
+            try:
+                gTTS(text=spoken_text, lang="ar", timeout=(3, 8)).save(str(audio_path))
+                if audio_path.is_file() and audio_path.stat().st_size > 1000:
+                    audio = AudioFileClip(str(audio_path))
             except Exception:
                 audio = None
-        duration = (audio.duration + 0.4) if audio is not None else max(8, min(45, len(script.split()) / 2.2))
-        clip = ImageClip(frame).set_duration(duration)
+
+        # Split the script into readable scenes instead of placing the entire
+        # paragraph on one static card where most text can be clipped.
+        words = script.split()
+        chunks = [" ".join(words[i:i+12]) for i in range(0, len(words), 12)] or [title]
         if audio is not None:
-            clip = clip.set_audio(audio)
-        clip.write_videofile(str(mp4_path), fps=15, codec="libx264", audio_codec="aac", logger=None, threads=1, preset="ultrafast", ffmpeg_params=["-crf", "28"])
+            duration = min(45, max(5, audio.duration))
+        else:
+            duration = min(45, max(8, len(words) / 2.2))
+        scene_duration = duration / len(chunks)
+
+        for index, chunk in enumerate(chunks):
+            image = Image.new("RGB", (W, H), "#101827")
+            draw = ImageDraw.Draw(image)
+            draw.rounded_rectangle((22, 22, W-22, H-22), radius=30, outline="#f4b942", width=3)
+            draw.text((W//2, 78), "TOUNSI AI STUDIO", font=small_font, fill="#f4b942", anchor="mm")
+            draw.text((W//2, 150), title[:42], font=title_font, fill="white", anchor="mm", direction="rtl")
+            draw.rounded_rectangle((34, 230, W-34, 710), radius=26, fill="#18263b", outline="#34445d", width=2)
+            # Wrap by word count and render Arabic right-to-left within the safe area.
+            lines, line = [], ""
+            for word in chunk.split():
+                candidate = (line + " " + word).strip()
+                if len(candidate) > 24 and line:
+                    lines.append(line)
+                    line = word
+                else:
+                    line = candidate
+            if line:
+                lines.append(line)
+            line_gap = 54
+            first_y = 470 - ((len(lines)-1) * line_gap // 2)
+            for j, text_line in enumerate(lines[:6]):
+                draw.text((W//2, first_y + j*line_gap), text_line, font=body_font,
+                          fill="#f8fafc", anchor="mm", direction="rtl")
+            draw.text((W//2, 770), f"المشهد {index+1} / {len(chunks)}", font=small_font,
+                      fill="#f4b942", anchor="mm", direction="rtl")
+            draw.text((W//2, 850), "تابعنا للمزيد 🇹🇳", font=small_font, fill="#cbd5e1",
+                      anchor="mm", direction="rtl")
+            scenes.append(ImageClip(np.array(image)).set_duration(scene_duration))
+
+        final = concatenate_videoclips(scenes, method="compose")
+        if audio is not None:
+            audio_segment = audio.subclip(0, min(duration, audio.duration))
+            final = final.set_audio(audio_segment)
+        final.write_videofile(str(mp4_path), fps=15, codec="libx264", audio_codec="aac",
+                              logger=None, threads=1, preset="ultrafast",
+                              ffmpeg_params=["-crf", "27"])
+        if not mp4_path.is_file() or mp4_path.stat().st_size < 10000:
+            raise RuntimeError("ملف الفيديو النهائي ما تخلقش بالشكل الصحيح.")
     except Exception as exc:
-        for p in (mp4_path, audio_path):
-            try: p.unlink(missing_ok=True)
-            except Exception: pass
+        try: mp4_path.unlink(missing_ok=True)
+        except Exception: pass
         return jsonify({"error": "تعذّر تركيب ملف MP4 على الخادم: " + str(exc)[:220]}), 500
     finally:
-        try:
-            if clip is not None: clip.close()
+        if final is not None:
+            try: final.close()
+            except Exception: pass
+        for scene in scenes:
+            try: scene.close()
+            except Exception: pass
+        if audio is not None:
+            try: audio.close()
+            except Exception: pass
+        try: audio_path.unlink(missing_ok=True)
         except Exception: pass
-        try:
-            if audio is not None: audio.close()
-        except Exception: pass
-    try: audio_path.unlink(missing_ok=True)
-    except Exception: pass
-    return jsonify({"download_url": f"/download/{mp4_path.name}", "preview_url": f"/preview/{mp4_path.name}", "filename": mp4_path.name, "message": "الفيديو جاهز! تنجم تتفرّج فيه من المعاينة ولا تهبطو."})
+
+    return jsonify({"download_url": f"/download/{mp4_path.name}",
+                    "preview_url": f"/preview/{mp4_path.name}",
+                    "filename": mp4_path.name,
+                    "message": "الفيديو جاهز: مشاهد متتابعة مع النصّ والصوت إذا توفّر."})
 
 
 @app.post("/api/render-stock")
